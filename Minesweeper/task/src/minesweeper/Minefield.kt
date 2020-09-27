@@ -3,16 +3,18 @@ package minesweeper
 import java.util.*
 import kotlin.random.Random
 
-class Minefield() {
+class Minefield {
 
-    val debugPrinter = false
+    val debugPrinter = true
     val input = Scanner(System.`in`)
     var numOfMines = 0
     var gameFinished = false
     var gameWon = false
+    var gameLost = false
     val minefieldSize = 9
     var minefield: Array<CharArray> = Array(minefieldSize) { CharArray(minefieldSize) {'.'} }
     var minesMarked: Array<BooleanArray> = Array(minefieldSize) { BooleanArray(minefieldSize) {false} }
+    var uncoveredCells = Array(minefieldSize) { BooleanArray(minefieldSize) {false} }
     var totalMinesMarked = 0
 
 
@@ -22,21 +24,40 @@ class Minefield() {
         numOfMines = input.nextInt()
         setMines()
         countSurroundingMines()
-        printMineField(true)
+        printMineField()
 
         while(!gameFinished) {
-            markMine()
-            printMineField(true)
-            if (checkForWinner()) {
+//            markMine()
+            var validInput = false
+            while (!validInput) {
+                println("Set/unset mine mark or claim a cell as free (eg: 3 2 free, 1 2 mine): ")
+                val y = input.nextInt() - 1   // Adjust user view input which is starting at index 1
+                val x = input.nextInt() - 1   // Adjust user view input which is starting at index 1
+                val action = input.next()
+
+                if (action == "mine") {
+                    markMine(x, y)
+                    validInput = true
+                } else if (action == "free") {
+                    markFree(x, y)
+                    validInput = true
+                } else {
+                    println("Invalid input!")
+                    continue
+                }
+            }
+
+            printMineField()
+            checkForWinner()
+
+            if (gameWon) {
+                println("Congratulations! You found all the mines!")
                 gameFinished = true
-                gameWon = true
+            } else if (gameLost) {
+                println("You suck")
+                gameFinished = true
             }
         }
-
-        if (gameWon) {
-            print("Congratulations! You found all the mines!")
-        }
-
     }
 
     /**
@@ -109,16 +130,12 @@ class Minefield() {
      * Player mark/unmark coordinate as a mine
      * Can't mark where there is a number
      */
-    fun markMine() {
+    fun markMine(x: Int, y: Int) {
         var valid = false
         while(!valid) {
-            println("Set/delete mines marks (x and y coordinates): ")
-            val y = input.nextInt() - 1   // Adjust user view input which is starting at index 1
-            val x = input.nextInt() - 1   // Adjust user view input which is starting at index 1
-
             if (x !in 0 until minefieldSize || y !in 0 until minefieldSize) {
                 println("Coordinate outside of minefield!  Try again!")
-                continue
+                return
             } else if (minefield[x][y] in '1'..'9') {
                 println("There is a number here!")
                 continue
@@ -146,43 +163,79 @@ class Minefield() {
     }
 
     /**
+     * Player choose coordinate as free to uncover
+     */
+    fun markFree(x: Int, y: Int) {
+        // If Player chooses mine, the game ends as loss
+        if (minefield[x][y] == 'X') {
+            println("You stepped on a mine and failed!")
+            //TODO: Uncover ALL mines to show end locations
+            gameLost = true
+            gameFinished = true
+            return
+        }
+
+        // If Player chooses a number hint, it will reveal just that cell
+        if (minefield[x][y] in '1'..'8') {
+            uncoveredCells[x][y] = true
+        }
+        // If Player chooses a cell that has no mines around it, it should automatically explore all cells around it
+        // until no more can be explored automatically
+        else if (minefield[x][y] == '.') {
+            uncoveredCells[x][y] = true
+
+            for (i in Math.max(x - 1, 0)..Math.min(x + 1, minefieldSize - 1)) {
+                for (j in Math.max(y - 1, 0)..Math.min(y + 1, minefieldSize - 1)) {
+                    if (!uncoveredCells[i][j] && i in 0..minefieldSize - 1 && j in 0..minefieldSize - 1) {
+                        markFree(i, j)
+                    }
+                }
+            }
+        }
+    }
+
+    /**
      * Check if user wins.  Win occurs when all mines are exactly marked (no extra or missing marks)
      */
-    fun checkForWinner(): Boolean {
+    fun checkForWinner() {
         // User can only win if the marks equal the number of mines
         if (totalMinesMarked != numOfMines) {
-            return false
+            return
         }
 
         // Check each 'X' mine on minefield matches minesMarked
         for (x in 0 until minefieldSize) {
             for (y in 0 until minefieldSize) {
                 if (minefield[x][y] == 'X' && !minesMarked[x][y]) {
-                    return false
+                    return
                 }
             }
         }
-        return true
+        gameWon = true
     }
 
     /**
      * Print the minefield
      */
-    private fun printMineField(hideMines: Boolean) {
+    private fun printMineField() {
 
         // Print header
         println(" |123456789| ")
         println("-|---------|")
 
         for (x in minefield.indices) {
-            print("${x + 1}|")
+            print("${x + 1}|")  // row numbering
             for (y in minefield.indices) {
                 if (minesMarked[x][y]) {
                     print("*")
-                } else if (hideMines && minefield[x][y] == 'X') {
-                    print('.')
+                } else if (uncoveredCells[x][y]) {
+                    if (minefield[x][y] == '.') {
+                        print('/')
+                    } else {
+                        print(minefield[x][y])
+                    }
                 } else {
-                    print(minefield[x][y])
+                    print('.')
                 }
             }
             println("|")
